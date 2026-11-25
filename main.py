@@ -8,15 +8,23 @@ import yfinance as yf
 
 
 def main():
-  # 1. データの取得（日本株 ＋ ドル円 ＋ 日経平均）
-  ticker = "7203.T"
+  # ==========================================
+  # 【設定エリア】ここを書き換えて自由に実験できます
+  ticker = "7203.T"  # 予測したい銘柄（例: 6758.T ソニー, 9984.T ソフトバンクG）
+  period_data = "10y"  # データの期間（"5y", "10y", "max" など）
+  # ==========================================
+
   fx_ticker = "USDJPY=X"
   index_ticker = "^N225"
-  print(f"{ticker}, {fx_ticker}, {index_ticker} のデータを取得中...")
+  print(
+      f"対象銘柄: {ticker} (期間: {period_data}), 为替: {fx_ticker}, 指数:"
+      f" {index_ticker} のデータを取得中..."
+  )
 
-  stock_data = yf.download(ticker, period="5y")
-  fx_data = yf.download(fx_ticker, period="5y")
-  index_data = yf.download(index_ticker, period="5y")
+  # データの取得（設定した期間を反映）
+  stock_data = yf.download(ticker, period=period_data)
+  fx_data = yf.download(fx_ticker, period=period_data)
+  index_data = yf.download(index_ticker, period=period_data)
 
   if isinstance(stock_data.columns, pd.MultiIndex):
     stock_data.columns = stock_data.columns.get_level_values(0)
@@ -27,18 +35,18 @@ def main():
 
   data = pd.DataFrame()
   data["Close"] = stock_data["Close"]
-  data["Volume"] = stock_data["Volume"]  # 出来高を追加
+  data["Volume"] = stock_data["Volume"]
   data["FX_Close"] = fx_data["Close"]
   data["Index_Close"] = index_data["Close"]
 
   data = data.dropna()
 
-  # 2. 特徴量の作成（予測ハードルは＋0.5%に維持）
+  # 特徴量の作成（＋0.5%以上のハードル）
   data["Target"] = (
       data["Close"].shift(-1) > data["Close"] * 1.005
   ).astype(int)
 
-  # ① トヨタ株のテクニカル指標
+  # トヨタ（対象銘柄）のテクニカル指標
   data["Return"] = data["Close"].pct_change()
   data["MA5"] = data["Close"].rolling(window=5).mean()
   data["MA25"] = data["Close"].rolling(window=25).mean()
@@ -50,28 +58,23 @@ def main():
   rs = gain / loss
   data["RSI"] = 100 - (100 / (1 + rs))
 
-  # ボリンジャーバンド（20日基準の標準偏差を利用）
+  # ボリンジャーバンド
   ma20 = data["Close"].rolling(window=20).mean()
   std20 = data["Close"].rolling(window=20).std()
   data["BB_Upper"] = ma20 + (std20 * 2)
   data["BB_Lower"] = ma20 - (std20 * 2)
-  data["BB_Width"] = (data["BB_Upper"] - data["BB_Lower"]) / ma20  # バンドの幅
+  data["BB_Width"] = (data["BB_Upper"] - data["BB_Lower"]) / ma20
 
-  # 出来高の変化率
   data["Volume_Return"] = data["Volume"].pct_change()
 
-  # ② ドル円為替の指標
+  # 為替と日経平均の指標
   data["FX_Return"] = data["FX_Close"].pct_change()
   data["FX_MA5"] = data["FX_Close"].rolling(window=5).mean()
-
-  # ③ 日経平均の指標
   data["Index_Return"] = data["Index_Close"].pct_change()
   data["Index_MA5"] = data["Index_Close"].rolling(window=5).mean()
 
-  # 欠損値を削除
   data = data.dropna()
 
-  # 使用する特徴量を拡張
   features = [
       "Return",
       "MA5",
@@ -87,33 +90,31 @@ def main():
   X = data[features]
   y = data["Target"]
 
-  # 3. データの分割
   X_train, X_test, y_train, y_test = train_test_split(
       X, y, test_size=0.2, shuffle=False
   )
 
-  # 4. 機械学習モデルの学習（LightGBM）
-  print(
-      "モデルを訓練中（出来高やボリンジャーバンドなどの新指標を追加しました）..."
-  )
+  print("モデルを訓練中...")
   model = lgb.LGBMClassifier(
       n_estimators=150, learning_rate=0.03, random_state=42, verbose=-1
   )
   model.fit(X_train, y_train)
 
-  # 5. 予測と評価
   predictions = model.predict(X_test)
   accuracy = accuracy_score(y_test, predictions)
 
-  print(f"テストデータの予測精度: {accuracy * 100:.2f}%")
+  print(f"【{ticker}】テストデータの予測精度: {accuracy * 100:.2f}%")
 
-  # 最新のデータを使った翌日の予測
   latest_data = X.tail(1)
   next_pred = model.predict(latest_data)
   result_msg = (
-      "【AIの予測】次営業日の 7203.T は ... 【 ＋0.5%以上 上がる 】と予測されます！"
+      f"【AIの予測】次営業日の {ticker} は ... 【 ＋0.5%以上 上がる"
+      " 】と予測されます！"
       if next_pred[0] == 1
-      else "【AIの予測】次営業日の 7203.T は ... 【 大きな上昇は見込めない（横ばい・下落） 】と予測されます！"
+      else (
+          f"【AIの予測】次営業日の {ticker} は ... 【 大きな上昇は見込めない（横ばい・下落）"
+          " 】と予測されます！"
+      )
   )
   print(result_msg)
 
