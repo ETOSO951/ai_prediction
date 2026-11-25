@@ -9,16 +9,15 @@ import yfinance as yf
 
 def main():
   # 1. データの取得（例：トヨタ自動車 「7203.T」）
-  # ※他の銘柄にする場合は、ここのコードを変更してください（例: ソニーグループなら "6758.T"）
   ticker = "7203.T"
   print(f"{ticker} の株価データを取得中...")
 
-  # 過去5年分のデータを取得
-  data = yf.Download(ticker, period="5y")
+  # 過去5年分のデータを取得（※ dは小文字）
+  data = yf.download(ticker, period="5y")
 
-  # yfinanceのバージョンによってカラム構造が変わる場合があるため調整
+  # yfinanceのバージョンによってカラム構造が変わる場合があるため調整（※ dは小文字）
   if isinstance(data.columns, pd.MultiIndex):
-    Data.columns = data.columns.get_level_values(0)
+    data.columns = data.columns.get_level_values(0)
 
   # 2. 特徴量（説明変数）の作成
   # 翌日の終値が前日より上がる（1）か下がる（0）かを予測ターゲットにする
@@ -61,4 +60,5 @@ def main():
 
 
 if __name__ == "__main__":
-  Main()
+  # ここを小文字の main() に修正しています
+  main()
