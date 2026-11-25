@@ -1,41 +1,45 @@
 import datetime
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 import yfinance as yf
 
 
 def main():
-  # 1. データの取得（日本株 ＋ ドル円為替データ）
+  # 1. データの取得（日本株 ＋ ドル円 ＋ 日経平均）
   ticker = "7203.T"
   fx_ticker = "USDJPY=X"
-  print(f"{ticker} と {fx_ticker} のデータを取得中...")
+  index_ticker = "^N225"
+  print(f"{ticker}, {fx_ticker}, {index_ticker} のデータを取得中...")
 
   # それぞれのデータを取得
   stock_data = yf.download(ticker, period="5y")
   fx_data = yf.download(fx_ticker, period="5y")
+  index_data = yf.download(index_ticker, period="5y")
 
   # マルチインデックスの調整
   if isinstance(stock_data.columns, pd.MultiIndex):
     stock_data.columns = stock_data.columns.get_level_values(0)
   if isinstance(fx_data.columns, pd.MultiIndex):
     fx_data.columns = fx_data.columns.get_level_values(0)
+  if isinstance(index_data.columns, pd.MultiIndex):
+    index_data.columns = index_data.columns.get_level_values(0)
 
   # ひとつのデータフレームにまとめる
   data = pd.DataFrame()
   data["Close"] = stock_data["Close"]
   data["FX_Close"] = fx_data["Close"]
+  data["Index_Close"] = index_data["Close"]
 
   # 欠損値を削除
   data = data.dropna()
 
   # 2. 特徴量（ヒント）の作成
-  # 翌日の終値が前日より上がる（1）か下がる（0）かを予測ターゲットにする
   data["Target"] = (data["Close"].shift(-1) > data["Close"]).astype(int)
 
-  # ① トヨタ株自体のテクニカル指標
+  # ① トヨタ株のテクニカル指標
   data["Return"] = data["Close"].pct_change()
   data["MA5"] = data["Close"].rolling(window=5).mean()
   data["MA25"] = data["Close"].rolling(window=25).mean()
@@ -47,15 +51,28 @@ def main():
   rs = gain / loss
   data["RSI"] = 100 - (100 / (1 + rs))
 
-  # ② ドル円為替の指標を追加
+  # ② ドル円為替の指標
   data["FX_Return"] = data["FX_Close"].pct_change()
   data["FX_MA5"] = data["FX_Close"].rolling(window=5).mean()
+
+  # ③ 日経平均の指標
+  data["Index_Return"] = data["Index_Close"].pct_change()
+  data["Index_MA5"] = data["Index_Close"].rolling(window=5).mean()
 
   # 欠損値を削除
   data = data.dropna()
 
-  # 使用する特徴量に為替の要素をプラス
-  features = ["Return", "MA5", "MA25", "RSI", "FX_Return", "FX_MA5"]
+  # 使用する特徴量
+  features = [
+      "Return",
+      "MA5",
+      "MA25",
+      "RSI",
+      "FX_Return",
+      "FX_MA5",
+      "Index_Return",
+      "Index_MA5",
+  ]
   X = data[features]
   y = data["Target"]
 
@@ -64,9 +81,9 @@ def main():
       X, y, test_size=0.2, shuffle=False
   )
 
-  # 4. 機械学習モデルの学習（ランダムフォレスト）
-  print("モデルを訓練中（ドル円為替データを追加しました）...")
-  model = RandomForestClassifier(n_estimators=100, random_state=42)
+  # 4. 機械学習モデルの学習（LightGBMを使用）
+  print("モデルを訓練中（LightGBMを使用しています）...")
+  model = lgb.LGBMClassifier(random_state=42, verbose=-1)
   model.fit(X_train, y_train)
 
   # 5. 予測と評価
