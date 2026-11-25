@@ -1,0 +1,31 @@
+name: Stock Price Prediction
+
+# 実行するタイミング（今回は手動での実行 ＋ 毎週月曜日の朝に自動実行）
+on:
+  workflow_dispatch: # GitHubの画面から手動で実行できるようにするボタン
+  schedule:
+    - cron: '0 0 * * 1' # 毎週月曜日のUTC 0:00（日本時間なら月曜日の朝9:00）に自動実行
+
+jobs:
+  run-prediction:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. リポジトリのコードをGitHub上でチェックアウト
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Pythonのセットアップ
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # 3. 必要なライブラリのインストール
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # 4. メインプログラムの実行
+      - name: Run prediction script
+        run: python main.py
