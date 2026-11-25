@@ -8,38 +8,54 @@ import yfinance as yf
 
 
 def main():
-  # 1. データの取得（例：トヨタ自動車 「7203.T」）
+  # 1. データの取得（日本株 ＋ ドル円為替データ）
   ticker = "7203.T"
-  print(f"{ticker} の株価データを取得中...")
+  fx_ticker = "USDJPY=X"
+  print(f"{ticker} と {fx_ticker} のデータを取得中...")
 
-  # 過去5年分のデータを取得
-  data = yf.download(ticker, period="5y")
+  # それぞれのデータを取得
+  stock_data = yf.download(ticker, period="5y")
+  fx_data = yf.download(fx_ticker, period="5y")
 
-  # yfinanceのバージョンによってカラム構造が変わる場合があるため調整
-  if isinstance(data.columns, pd.MultiIndex):
-    data.columns = data.columns.get_level_values(0)
+  # マルチインデックスの調整
+  if isinstance(stock_data.columns, pd.MultiIndex):
+    stock_data.columns = stock_data.columns.get_level_values(0)
+  if isinstance(fx_data.columns, pd.MultiIndex):
+    fx_data.columns = fx_data.columns.get_level_values(0)
+
+  # ひとつのデータフレームにまとめる
+  data = pd.DataFrame()
+  data["Close"] = stock_data["Close"]
+  data["FX_Close"] = fx_data["Close"]
+
+  # 欠損値を削除
+  data = data.dropna()
 
   # 2. 特徴量（ヒント）の作成
   # 翌日の終値が前日より上がる（1）か下がる（0）かを予測ターゲットにする
   data["Target"] = (data["Close"].shift(-1) > data["Close"]).astype(int)
 
-  # ① 変動率と移動平均線
+  # ① トヨタ株自体のテクニカル指標
   data["Return"] = data["Close"].pct_change()
   data["MA5"] = data["Close"].rolling(window=5).mean()
   data["MA25"] = data["Close"].rolling(window=25).mean()
 
-  # ② RSI（14日）の計算を追加
+  # RSI（14日）
   delta = data["Close"].diff()
   gain = delta.where(delta > 0, 0).rolling(window=14).mean()
   loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
   rs = gain / loss
   data["RSI"] = 100 - (100 / (1 + rs))
 
+  # ② ドル円為替の指標を追加
+  data["FX_Return"] = data["FX_Close"].pct_change()
+  data["FX_MA5"] = data["FX_Close"].rolling(window=5).mean()
+
   # 欠損値を削除
   data = data.dropna()
 
-  # 使用する特徴量を増やす（Return, MA5, MA25に加え、RSIを投入）
-  features = ["Return", "MA5", "MA25", "RSI"]
+  # 使用する特徴量に為替の要素をプラス
+  features = ["Return", "MA5", "MA25", "RSI", "FX_Return", "FX_MA5"]
   X = data[features]
   y = data["Target"]
 
@@ -49,7 +65,7 @@ def main():
   )
 
   # 4. 機械学習モデルの学習（ランダムフォレスト）
-  print("モデルを訓練中（RSIを追加しました）...")
+  print("モデルを訓練中（ドル円為替データを追加しました）...")
   model = RandomForestClassifier(n_estimators=100, random_state=42)
   model.fit(X_train, y_train)
 
