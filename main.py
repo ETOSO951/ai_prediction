@@ -37,7 +37,10 @@ def main():
   data = data.dropna()
 
   # 2. 特徴量（ヒント）の作成
-  data["Target"] = (data["Close"].shift(-1) > data["Close"]).astype(int)
+  # ★【変更点】翌日の終値が「当日の終値 × 1.005（＋0.5%以上）」より高いときだけ1にする
+  data["Target"] = (
+      data["Close"].shift(-1) > data["Close"] * 1.005
+  ).astype(int)
 
   # ① トヨタ株のテクニカル指標
   data["Return"] = data["Close"].pct_change()
@@ -82,7 +85,7 @@ def main():
   )
 
   # 4. 機械学習モデルの学習（LightGBMを使用）
-  print("モデルを訓練中（LightGBMを使用しています）...")
+  print("モデルを訓練中（予測のハードルを＋0.5%に設定しました）...")
   model = lgb.LGBMClassifier(random_state=42, verbose=-1)
   model.fit(X_train, y_train)
 
@@ -95,8 +98,13 @@ def main():
   # 最新のデータを使った翌日の予測
   latest_data = X.tail(1)
   next_pred = model.predict(latest_data)
-  result_text = "値上がり" if next_pred[0] == 1 else "値下がり"
-  print(f"【AIの予測】次営業日の {ticker} は ... 【 {result_text} 】と予測されます！")
+  result_text = "＋0.5%以上の上昇" "横ばいまたは下落"  # 調整
+  result_msg = (
+      "【AIの予測】次営業日の 7203.T は ... 【 ＋0.5%以上 上がる 】と予測されます！"
+      if next_pred[0] == 1
+      else "【AIの予測】次営業日の 7203.T は ... 【 大きな上昇は見込めない（横ばい・下落） 】と予測されます！"
+  )
+  print(result_msg)
 
 
 if __name__ == "__main__":
