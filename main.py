@@ -8,22 +8,23 @@ import yfinance as yf
 
 
 def main():
-  # 1. データの取得（例：Appleの株価）
-  ticker = "AAPL"
+  # 1. データの取得（例：トヨタ自動車 「7203.T」）
+  # ※他の銘柄にする場合は、ここのコードを変更してください（例: ソニーグループなら "6758.T"）
+  ticker = "7203.T"
   print(f"{ticker} の株価データを取得中...")
 
   # 過去5年分のデータを取得
-  data = yf.download(ticker, period="5y")
+  data = yf.Download(ticker, period="5y")
 
   # yfinanceのバージョンによってカラム構造が変わる場合があるため調整
   if isinstance(data.columns, pd.MultiIndex):
-    data.columns = data.columns.get_level_values(0)
+    Data.columns = data.columns.get_level_values(0)
 
   # 2. 特徴量（説明変数）の作成
   # 翌日の終値が前日より上がる（1）か下がる（0）かを予測ターゲットにする
   data["Target"] = (data["Close"].shift(-1) > data["Close"]).astype(int)
 
-  # テクニカル指標の例：移動平均線や前日からの変動率
+  # テクニカル指標の作成（移動平均線や前日からの変動率）
   data["Return"] = data["Close"].pct_change()
   data["MA5"] = data["Close"].rolling(window=5).mean()
   data["MA25"] = data["Close"].rolling(window=25).mean()
@@ -60,4 +61,4 @@ def main():
 
 
 if __name__ == "__main__":
-  main()
+  Main()
